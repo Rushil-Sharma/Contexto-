@@ -1,24 +1,118 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contexto!</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Contexto!</h1>
-    <p>Guesses: <span id="tries">0</span></p>
-    <form id="form">
-        <input type="text" id="inp" placeholder="Type a word" autocomplete="off" autofocus>
-    </form>
-    <div>
-        <button id="hint">Hint</button>
-        <button id="giveup">Give up</button>
-        <button id="new">New game</button>
-    </div>
-    <p id="msg"></p>
-    <ol id="guesses"></ol>
+    <!-- ============ 1. INTRO ============ -->
+    <section id="intro" class="page" aria-label="Contexto. Powered by Word2Vec, brought to you by Rushil Sharma">
+        <div class="intro-stage" aria-hidden="true">
+            <p id="intro-text" class="intro-text"><span id="intro-word" class="intro-word"></span><span id="intro-vec" class="intro-vec"></span><span class="cursor">&#9611;</span></p>
+        </div>
+        <div class="intro-credits">
+            <p>powered by <b>Word2Vec</b></p>
+            <p>brought to you by <b>Rushil Sharma</b></p>
+        </div>
+        <p class="intro-skip">[ press any key to skip ]</p>
+    </section>
+
+    <!-- ============ 2. HOME / RULES ============ -->
+    <section id="home" class="page" hidden>
+        <header class="session-bar">
+            <span class="wordmark">contexto</span>
+            <span class="session-info">semantic word guessing</span>
+            <button class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Light mode">
+                <span class="switch-label">dark</span><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-label">light</span>
+            </button>
+        </header>
+
+        <main class="home-main">
+            <div class="hero">
+                <div class="hero-text">
+                    <h1>Contexto<span class="cursor" aria-hidden="true">&#9611;</span></h1>
+                    <p class="lede">Find the secret word. Every guess is ranked by how close its <em>meaning</em> is to the secret.</p>
+                    <button id="play" class="btn btn-primary" type="button">&gt; play</button>
+                </div>
+                <ul class="facts" aria-label="About the game">
+                    <li><span>words</span><span>7,906</span></li>
+                    <li><span>vector</span><span>300 dims</span></li>
+                    <li><span>model</span><span>word2vec</span></li>
+                    <li><span>corpus</span><span>google news</span></li>
+                </ul>
+            </div>
+
+            <h2 class="section-title">how to play</h2>
+            <ol class="rules">
+                <li><span class="gutter">01</span><span class="cmd">guess</span>
+                    <p>Type any word from the dictionary. Each valid guess gets a rank.</p></li>
+                <li><span class="gutter">02</span><span class="cmd">rank</span>
+                    <p>Rank <b>1</b> is the secret word. The lower the rank, the closer your word's meaning, measured by cosine similarity between word vectors.</p></li>
+                <li><span class="gutter">03</span><span class="cmd">hint</span>
+                    <p>Hint 1 shows how many letters the word has, hint 2 reveals the first letter, hint 3 the last letter. After that, each hint reveals a word ranked closer than your best guess. It counts as a guess and is outlined in gold. Once you are inside the top 50, no more hints.</p></li>
+                <li><span class="gutter">04</span><span class="cmd">give up</span>
+                    <p>Reveals the secret word and the 20 words closest to it.</p></li>
+            </ol>
+        </main>
+
+        <footer class="site-footer">
+            <span>powered by <b>Word2Vec</b></span>
+            <span>brought to you by <b>Rushil Sharma</b></span>
+        </footer>
+    </section>
+
+    <!-- ============ 3. GAME ============ -->
+    <section id="game" class="page" hidden>
+        <header class="session-bar">
+            <button id="home-link" class="wordmark linkish" type="button">contexto</button>
+            <span class="session-info">find the secret word</span>
+            <button class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Light mode">
+                <span class="switch-label">dark</span><span class="switch-track"><span class="switch-thumb"></span></span><span class="switch-label">light</span>
+            </button>
+        </header>
+
+        <main class="game-main">
+            <div class="status-row">
+                <span>guesses: <b id="tries">0</b></span>
+                <span id="pattern-wrap" hidden>word: <b id="pattern" class="pattern"></b></span>
+            </div>
+
+            <form id="form" class="guess-form" autocomplete="off">
+                <label for="inp" class="prompt">&gt;</label>
+                <input type="text" id="inp" placeholder="type a word" spellcheck="false" autocapitalize="off">
+            </form>
+            <p id="msg" class="msg" role="status" aria-live="polite"></p>
+
+            <div class="actions">
+                <button id="hint" class="btn" type="button">[ hint ]</button>
+                <button id="giveup" class="btn" type="button">[ give up ]</button>
+                <button id="new" class="btn" type="button">[ new game ]</button>
+            </div>
+
+            <section id="result" class="result" hidden aria-live="polite"></section>
+
+            <div class="columns">
+                <section class="col" aria-labelledby="guesses-title">
+                    <h2 id="guesses-title" class="section-title">guesses</h2>
+                    <ol id="guesses" class="guess-list"></ol>
+                    <p id="guesses-empty" class="empty">No guesses yet.</p>
+                </section>
+                <section class="col" aria-labelledby="hints-title">
+                    <h2 id="hints-title" class="section-title">hints</h2>
+                    <ol id="hints" class="hint-list"></ol>
+                    <p id="hints-empty" class="empty">No hints taken.</p>
+                </section>
+            </div>
+        </main>
+    </section>
+
+    <!-- the C++ game compiled to WebAssembly (built by Backend/build_wasm.sh) -->
+    <script src="wasm/contexto.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

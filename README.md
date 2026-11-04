@@ -51,6 +51,3 @@ EXTRA{
     . store a leaderboard (maybe mogodb or something)
 }
 ```
-
-## C++ implementation:
-First I had downloaded the google word2vec from this kaggle website ```https://www.kaggle.com/datasets/leadbest/googlenewsvectorsnegative300```. But as this was a very big folder (~3GB unzipped) I have narrowed down the words (from 3 Million words and phrases to 7950 most common words).
