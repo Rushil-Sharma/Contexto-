@@ -136,7 +136,7 @@ vector<vec> Vec;
     for(int r=0;r<count;r++) rank_of[order[r]] = r + 1; // final ranks
     // ACTUALLY START THE GAME : 
     string guess;
-    int tries, hints;
+    int tries, hints, best_rank = 6700; // 6700 is just a temp value
     tries = hints = 0;
     while(67){
         guess = "NotAWord";
@@ -149,14 +149,29 @@ vector<vec> Vec;
             cout << "The word was : " << Vec[secret].word << "\n";
             cout << "The top 20 words nearest to this word were :\n";
             for(int i=1;i<=20;i++){
-                cout << i << " : " << Vec[order[i]].word << "\n";
+                cout << i << " : " << Vec[order[i]].word;
+                if(i == best_rank) cout << "<-- You were here"; // if the guy comes close (the top 20)
+                cout << "\n";
             }
             return 0;
         }else if(strcmp("HINT",guess.c_str())==0){
             if(hints == 0){
-                cout << "-----HINT - 1-----\n" << "The word contains " << Vec[secret].word.length() << "\n-----Hint - 1-----\n";
+                cout << "-----HINT - 1-----\n" << "The word contains " << Vec[secret].word.length() << " letters\n-----Hint - 1-----\n";
+                hints ++;
+            }else if(hints == 1){
+                cout << "-----HINT - 2-----\n" << "The word starts with the letter " << Vec[secret].word[0] << "\n-----Hint - 2-----\n";
+                hints ++;
+            }else if(hints == 2){
+                cout << "-----HINT - 3-----\n" << "The word ends with the letter " << Vec[secret].word[Vec[secret].word.length()-1] << "\n-----Hint - 3-----\n";
+                hints ++;
             }else{
-                continue;
+                if(best_rank < 50) cout << "Alright thats enough hints for today no more hints now !\n";
+                else{
+                    uniform_int_distribution<int> hint_dist(2, best_rank);
+                    int random_rank = hint_dist(gen);
+                    cout << "The word at rank " << random_rank << " is " << Vec[order[random_rank - 2]].word << "\n";
+                }
+                hints++;
             }
             continue;
         }
@@ -164,6 +179,7 @@ vector<vec> Vec;
         if(it != word_to_index.end()){
             tries++;
             cout << "Rank : " << rank_of[it->second] << "\n";
+            if(best_rank > rank_of[it->second]) best_rank = rank_of[it->second];
             if (it->second == secret) {
                 cout << "Congratulations! You found the word in " << tries << " guesses!\n";
                 break;
