@@ -213,6 +213,9 @@ HintResult Game::hint(){
             h.type = HintType::WORD_AT_RANK;
             h.rank = random_rank;
             h.word = D.Vec[R->order[random_rank - 1]].word;
+            // the revealed word counts as a guess (website rule)
+            tries++;
+            if(best_rank > random_rank) best_rank = random_rank;
         }
         hints++;
     }

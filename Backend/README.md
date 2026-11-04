@@ -46,4 +46,5 @@ Every game response includes the current state: `tries`, `hints`, `best_rank` (n
 Notes:
 - Guesses are case-sensitive and only the first word is used, the same as `cin >> guess`. The frontend should lowercase input before sending it.
 - Repeating a guess counts as a try, as in the original.
+- One change from `C++/main.cpp`: a hint that reveals a word (hint 4 and later) also counts as a guess. It adds a try and can lower `best_rank`, so later hints get closer and stop once you are inside the top 50.
 - Games idle for 24h are deleted. At most 20,000 games are kept at once.
