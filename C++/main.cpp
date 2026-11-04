@@ -154,8 +154,8 @@ vector<vec> Vec;
         }else if(strcmp("EXIT",guess.c_str())==0){
             cout << "The word was : " << Vec[secret].word << "\n";
             cout << "The top 20 words nearest to this word were :\n";
-            for(int i=1;i<=20;i++){
-                cout << i << " : " << Vec[order[i]].word;
+            for(int i=2;i<=21;i++){
+                cout << i << " : " << Vec[order[i-1]].word;
                 if(i == best_rank) cout << "<-- You were here"; // if the guy comes close (the top 20)
                 cout << "\n";
             }
@@ -173,9 +173,9 @@ vector<vec> Vec;
             }else{
                 if(best_rank < 50) cout << "Alright thats enough hints for today no more hints now !\n";
                 else{
-                    uniform_int_distribution<int> hint_dist(2, best_rank);
+                    uniform_int_distribution<int> hint_dist(2, best_rank-1);
                     int random_rank = hint_dist(gen);
-                    cout << "The word at rank " << random_rank << " is " << Vec[order[random_rank - 2]].word << "\n";
+                    cout << "The word at rank " << random_rank << " is " << Vec[order[random_rank - 1]].word << "\n";
                 }
                 hints++;
             }

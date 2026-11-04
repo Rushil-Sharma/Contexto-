@@ -4,3 +4,10 @@ body {
     align-items: center;
     font-family: sans-serif;
 }
+
+#inp { font-size: 1.1em; padding: 6px; width: 260px; }
+button { margin: 6px 3px; }
+#msg { min-height: 1.2em; }
+#guesses { list-style: none; padding: 0; width: 280px; }
+#guesses li { display: flex; justify-content: space-between; padding: 4px 8px; margin: 3px 0; background: #eee; }
+#guesses li.latest { outline: 2px solid #333; }

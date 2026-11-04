@@ -4,9 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contexto!</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <p>Guesses: 0</p>
-    <input type="text" id="inp" placeholder="Type a word">
+    <h1>Contexto!</h1>
+    <p>Guesses: <span id="tries">0</span></p>
+    <form id="form">
+        <input type="text" id="inp" placeholder="Type a word" autocomplete="off" autofocus>
+    </form>
+    <div>
+        <button id="hint">Hint</button>
+        <button id="giveup">Give up</button>
+        <button id="new">New game</button>
+    </div>
+    <p id="msg"></p>
+    <ol id="guesses"></ol>
+    <script src="script.js"></script>
 </body>
 </html>
