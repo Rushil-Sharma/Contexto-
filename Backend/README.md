@@ -1,23 +1,37 @@
 # Contexto backend (C++)
 
-The game logic from `C++/main.cpp` running as an HTTP server. There are no external libraries: it uses only the standard library and sockets.
+The game logic from `C++/main.cpp`, usable in two ways:
+
+1. **On the website (GitHub Pages):** the C++ is compiled to WebAssembly (`../wasm/contexto.js`) and runs inside the visitor's browser. No server is needed.
+2. **Locally:** as a native HTTP server (`contexto_server.exe`).
+
+Both use the same `api.cpp` and `contexto.cpp`, so they return the same JSON.
 
 | File | What it is |
 |---|---|
 | `contexto.h / .cpp` | Your game: `cosine_similarity`, `load_text`, `load_binary`, the ranking (sims → order → rank_of), and the guess, HINT, HELP, EXIT and RUSHIL branches. The logic is the same as `main.cpp`, but results are returned instead of printed with `cout`. |
+| `api.h / .cpp` | Holds the running games and turns each result into JSON. Handles every `/api/*` path (`api_route`). |
+| `wasm_api.cpp` | WebAssembly entry points `contexto_init` / `contexto_call`, which go through `api_route` |
+| `build_wasm.sh` | Builds `../wasm/contexto.js` with Emscripten (the compiled C++ plus the embedded `vectors.bin`, in one file) |
 | `http_server.h / .cpp` | A small single-threaded HTTP/1.1 server (Winsock on Windows, BSD sockets on Linux/macOS) |
-| `server.cpp` | `main()`: loads `data/vectors.bin` once, keeps one `Game` per player, and handles the `/api/*` routes |
+| `server.cpp` | Native server `main()`: serves the website files plus `/api/*` |
 | `data/vectors.bin` | Copy of `C++/data/vectors.bin` |
+
+## Deploying (GitHub Pages)
+
+`.github/workflows/pages.yml` runs `build_wasm.sh` on every push to `main` and publishes `index.html`, `style.css`, `script.js` and `wasm/contexto.js`. One-time setup: in the repo, go to **Settings → Pages → Source** and choose **GitHub Actions**.
+
+To build the WebAssembly file locally (so that double-clicking `index.html` works without the server), install [Emscripten](https://emscripten.org/docs/getting_started/downloads.html) and run `bash Backend/build_wasm.sh`.
 
 ## Build & run
 
 ```
 # Windows (MinGW)
-g++ -O2 -std=c++14 server.cpp contexto.cpp http_server.cpp -o contexto_server -lws2_32
+g++ -O2 -std=c++14 server.cpp api.cpp contexto.cpp http_server.cpp -o contexto_server -lws2_32
 .\contexto_server.exe
 
 # Linux / macOS
-g++ -O2 -std=c++14 server.cpp contexto.cpp http_server.cpp -o contexto_server
+g++ -O2 -std=c++14 server.cpp api.cpp contexto.cpp http_server.cpp -o contexto_server
 ./contexto_server
 ```
 
