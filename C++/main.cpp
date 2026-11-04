@@ -145,6 +145,12 @@ vector<vec> Vec;
         if(strcmp("RUSHIL",guess.c_str())==0){
             cout << "Secret: " << Vec[secret].word << "\n";
             continue;
+        }else if(guess == "HELP"){
+            cout << "Guess a word from the dictionary.\n";
+            cout << "A lower rank means your guess is semantically closer.\n";
+            cout << "Rank 1 is the secret word.\n";
+            cout << "Type HINT for hints or EXIT to quit.\n";
+        continue;
         }else if(strcmp("EXIT",guess.c_str())==0){
             cout << "The word was : " << Vec[secret].word << "\n";
             cout << "The top 20 words nearest to this word were :\n";
