@@ -1,11 +1,22 @@
+## How to run it
+
+```
+g++ -O2 -std=c++17 main.cpp -o contexto
+.\contexto.exe 
+```
+
 ## Future plans 
 ```
 C++_PLAN{
     . OPTIMISE{
-        . store the vectors.txt (24KB) in a binary file format
+        : store the vectors.txt (24KB) in a binary file format
     }
     . GAMEPLAY{
-        . add the hint feature
+        : add the hint feature
+        . HINT{
+            . add the letters in hint 2 and 3
+            . add similar word from 1->current best
+        }
     }
     . CHEATS{
         . make the random function more random

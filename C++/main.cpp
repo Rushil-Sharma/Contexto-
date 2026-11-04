@@ -6,16 +6,17 @@
 using namespace std;
 
 #define N 7906
+const int DIM = 300;
 
 typedef struct vec{
     string word;
     float vector[300];
 }vec;
 
+// This function calculates the cosine of the angle between 2 vectors
+// by first calculating the dot product between A and B and then dividing 
+// by the square root of their norm
 float cosine_similarity(float A[],float B[]){
-    // This function calculates the cosine of the angle between 2 vectors
-    // by first calculating the dot product between A and B and then dividing 
-    // by the square root of their norm
     float dot_product, N_A, N_B;
     dot_product = N_A = N_B = 0;
     for(int i=0;i<300;i++){
@@ -27,42 +28,94 @@ float cosine_similarity(float A[],float B[]){
     return dot_product/(sqrt(N_A)*sqrt(N_B)); // cos = A.B/(root(A)xroot(B))
 }
 
+// a magical number as a magic so that we can figure out that the file is really outs
+const char MAGIC[4] = {'6','7','6','7'};
+
+bool load_text(const string& path, vector<vec>& Vec, unordered_map<string,int>& word_to_index, int& count){
+    ifstream file(path, ios::binary);
+    if(!file) return false;
+    string buf((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
+    const char* p = buf.c_str();
+    const char* end = p + buf.size();
+    Vec.assign(N + 4, vec());
+    word_to_index.clear();
+    word_to_index.reserve(N + 4);
+    count = 0;
+    while(p<end && count<(int)Vec.size()){
+        const char* line_end = (const char*) memchr(p,'\n', end-p);
+        if(!line_end) line_end = end;
+        const char* eq = (const char*)memchr(p, '=', line_end - p);
+        if(eq){
+            vec& v = Vec[count];
+            v.word.assign(p, eq);
+            const char* q = eq + 1;
+            if(q < line_end && *q == '[') q++; // skip '['
+            bool ok = true;
+            for(int k=0;k<DIM;k++){
+                char* next;
+                v.vector[k] = strtof(q, &next); // parse one number
+                if(next == q){ 
+                    ok = false; 
+                    break; 
+                }
+                q = next;
+                if(q < line_end && *q == ',') q++; // skip ','
+            }
+            if(ok){
+                word_to_index[v.word] = count;
+                count++;
+            }
+        }
+        p = line_end + 1;
+    }
+    Vec.resize(count);
+    if(count <= 0) return 0; 
+    return count;
+}
+
+bool load_binary(const string& path, vector<vec>& Vec, unordered_map<string,int>& word_to_index, int& count){
+    ifstream in(path, ios::binary);
+    if(!in) return false; // file doesn't exist yet
+    char magic[4];
+    in.read(magic, 4);
+    if(!in || memcmp(magic, MAGIC, 4) != 0) return false;
+    int32_t c, d;
+    in.read((char*)&c, sizeof c);
+    in.read((char*)&d, sizeof d);
+    if(!in || d != DIM || c <= 0 || c > 10000000) return false;
+    Vec.assign(c, vec());
+    word_to_index.clear();
+    word_to_index.reserve(c);
+    for(int i=0;i<c;i++){
+        uint32_t len;
+        in.read((char*)&len, sizeof len);
+        if(!in || len == 0 || len > 1000) return false;
+        Vec[i].word.resize(len);
+        in.read(&Vec[i].word[0], len);
+        in.read((char*)Vec[i].vector, sizeof(float) * DIM);
+        if(!in) return false;
+        word_to_index[Vec[i].word] = i;
+    }
+    count = c;
+    return true;
+}
+
 int main(){
     std::ios_base::sync_with_stdio(false); std::cin.tie(NULL);
 
-// INITIALISING THE VECTORS :
-    ifstream file("data/vectors.txt");
-    string line; // reads each line
-    vector<vec> Vec(N + 4); // 4 is just a random number required for making sure all the words get read
+vector<vec> Vec;
     unordered_map<string, int> word_to_index;
-    word_to_index.reserve(N + 4);
-    cout << "Loading the data ...\n"; 
     int count = 0;
-    for(int i=0;i<N;i++){
-        if (!getline(file,line)) break;
-        int position_word_end = line.find("="); // This is the "delimiter" for the seperation of words and vectors
-        if (position_word_end == string::npos) continue; // string::npos is a 
-        Vec[count].word = line.substr(0,position_word_end);
-        word_to_index[Vec[count].word] = count;
-        string data_part = line.substr(position_word_end + 1);
-        stringstream ss(data_part);
-        char dummy; 
-        ss >> dummy;
-        for(int k=0;k<300;k++){
-            ss >> Vec[count].vector[k];
-            if (k < 299) {
-                ss >> dummy;
-            }
-        }
-        count++;
-        cout << "\rProgress : " << i/(float)N*100 << flush;
-        cout << "\r%" << flush; 
+    cout << "Loading the data ...\n" << flush;
+
+    if(!load_binary("data/vectors.bin", Vec, word_to_index, count)){
+        // First run (or the .bin is missing/broken): parse the text file once
+        cout << "No binary cache found make sure u have the binary file and try again\n" << flush;
+        return 0;
     }
-    cout << "\rFully completed !          \n===ENJOY THE GAME===\n" << flush;
-    cout << "\n";
-    file.close();
-    
-// START THE GAME : 
+    cout << "===ENJOY THE GAME===\n\n" << flush;
+
+// START THE GAME : (unchanged from here on)
     // SELECT THE RANDOM WORD :
     cout << "Type:\n\t>HELP for help\n\t>HINT for hint\n\t>EXIT for exiting\n"; // pick the secret word
     unsigned seed = chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -108,7 +161,6 @@ int main(){
             continue;
         }
         auto it = word_to_index.find(guess);
-        // if(strcmp())
         if(it != word_to_index.end()){
             tries++;
             cout << "Rank : " << rank_of[it->second] << "\n";
