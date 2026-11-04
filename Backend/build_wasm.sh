@@ -9,7 +9,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p ../wasm
 
-emcc -O2 -std=c++14 \
+# em++ (not emcc) so the C++ standard library is linked in
+em++ -O2 -std=c++14 \
     wasm_api.cpp api.cpp contexto.cpp \
     --embed-file data/vectors.bin@/vectors.bin \
     -sMODULARIZE=1 -sEXPORT_NAME=createContexto \
