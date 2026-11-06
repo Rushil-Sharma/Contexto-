@@ -1,0 +1,2 @@
+# built by Backend/build_wasm.sh (GitHub Actions builds it on every push)
+wasm/

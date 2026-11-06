@@ -217,7 +217,77 @@ button, input { font: inherit; color: inherit; }
 ::view-transition-old(root),
 ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 ::view-transition-old(root) { z-index: 1; }
-::view-transition-new(root) { z-index: 2; }
+::view-transition-new(root) { z-index: 2; clip-path: var(--wave, none); }
+
+/* ---------- extra motion (transform/opacity only, so it never slows the wave) ---------- */
+@keyframes rise    { from { opacity: 0; transform: translateY(14px); } }
+@keyframes fade-in { from { opacity: 0; } }
+
+/* intro: credits fade in while the word is typed */
+.intro-credits p, .intro-skip { animation: fade-in 0.8s ease both; }
+.intro-credits p:nth-child(1) { animation-delay: 1.2s; }
+.intro-credits p:nth-child(2) { animation-delay: 1.5s; }
+.intro-skip { animation-delay: 2.2s; }
+
+/* home: staggered entrance (script.js sets --i and toggles .entering) */
+.page.entering .reveal { animation: rise 0.55s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
+
+/* play button: a ring pulses out of it */
+.btn-primary { position: relative; }
+.btn-primary::after {
+    content: ""; position: absolute; inset: -1px; pointer-events: none;
+    border: 1px solid var(--dp-color-ink);
+    animation: ring 2.4s ease-out infinite;
+}
+@keyframes ring { 0% { opacity: 0.8; transform: scale(1); } 70%, 100% { opacity: 0; transform: scale(1.12, 1.5); } }
+
+/* rules: the hovered row lights up */
+.rules li { transition: background-color 0.2s, box-shadow 0.2s; }
+.rules li:hover { background: color-mix(in srgb, var(--dp-color-ink) 7%, transparent); box-shadow: inset 3px 0 0 var(--dp-color-ink); }
+.rules li .gutter { transition: color 0.2s; }
+.rules li:hover .gutter { color: var(--dp-color-ink); }
+.facts li { transition: padding-left 0.2s; }
+.facts li:hover { padding-left: 1ch; }
+
+/* theme switch: the thumb overshoots a little */
+.switch-thumb { transition: left 0.28s cubic-bezier(.5, 1.7, .45, .9); }
+
+/* game: new guesses slide in and their bar fills; repeats flash */
+#tries { display: inline-block; }
+.guess { transition: background-color 0.2s; }
+.guess:hover { background: color-mix(in srgb, var(--dp-color-ink) 6%, transparent); }
+.guess.enter { animation: slide-in 0.45s cubic-bezier(.2, .8, .2, 1) both; }
+.guess.enter .bar-cover { animation: bar-fill 0.9s cubic-bezier(.2, .8, .2, 1) 0.1s both; }
+.guess.hinted.enter { animation: slide-in 0.45s cubic-bezier(.2, .8, .2, 1) both, gold-glow 1.4s ease 0.3s; }
+.guess.flash { animation: flash 0.7s ease; }
+@keyframes slide-in { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes bar-fill { from { width: 100%; } }
+@keyframes flash { 30% { border-color: var(--dp-color-emphasis); background: color-mix(in srgb, var(--dp-color-ink) 18%, transparent); } }
+@keyframes gold-glow { 40% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 35%, transparent), 0 0 18px var(--gold); } }
+
+/* hint pattern: revealed letters drop in */
+.pattern span { display: inline-block; }
+.pattern .pop { animation: pop 0.5s cubic-bezier(.3, 1.6, .5, 1) both; animation-delay: var(--d, 0ms); }
+.pattern .lit { color: var(--dp-color-emphasis); }
+@keyframes pop { from { opacity: 0; transform: translateY(-0.7em) scale(1.6); } }
+
+.hint-list li.enter { animation: slide-in 0.4s cubic-bezier(.2, .8, .2, 1) both; }
+
+/* loading message: animated dots */
+.msg.loading::after { content: ""; animation: dots 1.2s steps(1) infinite; }
+@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+
+/* end screen: box rises, then the top-20 list cascades in */
+.result.reveal { animation: rise 0.4s cubic-bezier(.2, .8, .2, 1) both; }
+.result.reveal li { animation: fade-in 0.35s ease both; animation-delay: calc(250ms + var(--i, 0) * 35ms); }
+.result.reveal li.here {
+    animation: fade-in 0.35s ease both, here-blink 1s ease 3;
+    animation-delay: calc(250ms + var(--i, 0) * 35ms), calc(700ms + var(--i, 0) * 35ms);
+}
+@keyframes here-blink { 50% { opacity: 0.35; } }
+
+/* win: glyph burst (spawned by script.js) */
+.glyph { position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; color: var(--dp-color-emphasis); font-weight: 500; will-change: transform, opacity; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
@@ -241,4 +311,6 @@ button, input { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
     .cursor { animation: none; }
     .intro-text, .switch-thumb, .switch-track, #intro.fade-out { transition: none; }
+    .reveal, .guess, .guess .bar-cover, .pattern span, .hint-list li, .result, .result li,
+    .intro-credits p, .intro-skip, .btn-primary::after, .msg.loading::after { animation: none !important; }
 }

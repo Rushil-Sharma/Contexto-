@@ -18,7 +18,7 @@ em++ -O2 -std=c++14 \
     -sEXPORTED_RUNTIME_METHODS=ccall \
     -sALLOW_MEMORY_GROWTH=1 \
     -sSINGLE_FILE=1 \
-    -sENVIRONMENT=web \
+    -sENVIRONMENT=web,worker \
     -o ../wasm/contexto.js
 
 echo "built ../wasm/contexto.js ($(wc -c < ../wasm/contexto.js) bytes)"

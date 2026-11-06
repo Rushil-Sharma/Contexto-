@@ -1,19 +1,58 @@
 // Contexto frontend. All game logic (ranking, hints, scoring) runs in the C++ backend;
 // this file only animates, calls the backend and draws the answers.
 //
-// The C++ backend runs in one of two ways:
-//  1. WebAssembly (wasm/contexto.js, built from Backend/ by build_wasm.sh): the C++ runs right
-//     here in the browser. This is what GitHub Pages uses - no server needed.
-//  2. Fallback: the native C++ server (Backend/contexto_server.exe) over HTTP.
+// The C++ backend (Backend/*.cpp compiled to WebAssembly = wasm/contexto.js) runs in one of these ways:
+//  1. In a Web Worker (engine-worker.js) - a background thread, so loading the 14 MB engine and
+//     computing rankings can never freeze the animations. Used on GitHub Pages.
+//  2. On the page itself, when workers aren't allowed (index.html opened straight from disk).
+//  3. Fallback: the native C++ server (Backend/contexto_server.exe) over HTTP.
 const API = location.protocol.startsWith("http") ? "" : "http://localhost:8080";
 
-// Start loading the C++ engine immediately; the intro animation hides the load time.
-const engineReady = (async () => {
-    if (typeof createContexto !== "function") return null;      // wasm build not present
+function workerEngine() {
+    return new Promise((resolve, reject) => {
+        let w;
+        try { w = new Worker("engine-worker.js"); } catch (e) { return reject(e); }
+        const waiting = new Map();
+        let next = 0;
+        const engine = {
+            call: (path, game, word) => new Promise((res, rej) => {
+                const id = ++next;
+                waiting.set(id, { res, rej });
+                w.postMessage({ id, path, game, word });
+            })
+        };
+        w.onmessage = e => {
+            const d = e.data;
+            if (d.type === "ready") return resolve(engine);
+            if (d.type === "failed") { w.terminate(); return reject(new Error(d.error)); }
+            const p = waiting.get(d.id);
+            waiting.delete(d.id);
+            if (p) d.error ? p.rej(new Error(d.error)) : p.res(d.body);
+        };
+        w.onerror = e => { e.preventDefault(); w.terminate(); reject(new Error(e.message || "worker failed")); };
+    });
+}
+
+function loadScript(src) {
+    return new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = src; s.onload = res; s.onerror = () => rej(new Error("missing " + src));
+        document.head.appendChild(s);
+    });
+}
+
+async function pageEngine() {
+    if (typeof createContexto !== "function") await loadScript("wasm/contexto.js");
     const M = await createContexto();
     if (!M.ccall("contexto_init", "number", ["string"], ["/vectors.bin"])) throw new Error("vectors.bin failed to load");
-    return M;
-})().catch(err => { console.error(err); return null; });
+    return { call: async (path, game, word) => M.ccall("contexto_call", "string", ["string", "string", "string"], [path, game, word]) };
+}
+
+// Start loading the C++ engine immediately; the intro animation hides the load time.
+// null = no wasm engine available -> use the HTTP server.
+const engineReady = workerEngine()
+    .catch(err => { console.info("engine worker unavailable, loading on page:", err.message); return pageEngine(); })
+    .catch(err => { console.info("wasm engine unavailable, using the C++ server:", err.message); return null; });
 const $ = id => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -31,43 +70,116 @@ function showPage(id) {
 // ---------------------------------------------------------------- wave transition
 // Like a slide transition: the browser snapshots the current page, update() swaps in
 // the new page / theme, and the NEW page is revealed through a wavy hole that grows
-// out of (x, y). The old page dims underneath it.
-// Uses the View Transitions API; browsers without it just swap instantly.
+// out of (x, y). Uses the View Transitions API; browsers without it just swap instantly.
 let waving = false;
 function wave(x, y, update) {
     if (reduced || !document.startViewTransition) { update(); return Promise.resolve(); }
     waving = true;
-    const vt = document.startViewTransition(update);
     const W = innerWidth, H = innerHeight;
-    const maxR = Math.hypot(Math.max(x, W - x), Math.max(y, H - y)) + 60;
+    // exactly the distance to the farthest corner: the wave ends the moment the screen is
+    // covered, so there is no dead time at the end where nothing visibly moves
+    const maxR = Math.hypot(Math.max(x, W - x), Math.max(y, H - y)) + 2;
 
-    // keyframes: a wavy polygon (same point count in every frame so it interpolates)
-    const FRAMES = 40, POINTS = 160, frames = [];
-    for (let f = 0; f <= FRAMES; f++) {
-        const p = f / FRAMES;
-        // gentle ease-out (sine): fast start, steady finish, no long crawl at the end
-        const r = Math.sin(p * Math.PI / 2) * maxR;
-        const amp = (8 + 0.05 * maxR) * Math.sin(p * Math.PI);  // wobble scales with screen, peaks mid-way
+    const DURATION = 750, POINTS = 160;
+    // the wavy outline at progress p (0..1)
+    function shape(p) {
+        // mostly constant speed with a soft start: never crawls, never stalls
+        const r = (0.6 * p + 0.4 * Math.sin(p * Math.PI / 2)) * maxR;
+        const amp = (8 + 0.05 * maxR) * Math.sin(p * Math.PI);  // wobble scales with screen, 0 at both ends
         const phase = p * 14;
         const pts = [];
         for (let i = 0; i < POINTS; i++) {
             const a = (i / POINTS) * Math.PI * 2;
-            const rr = f === FRAMES ? maxR * 1.5
-                     : Math.max(0, r + amp * Math.sin(7 * a + phase) + amp * 0.5 * Math.sin(12 * a - phase * 1.4));
+            const rr = Math.max(0, r + amp * Math.sin(7 * a + phase) + amp * 0.5 * Math.sin(12 * a - phase * 1.4));
             pts.push((x + rr * Math.cos(a)).toFixed(1) + "px " + (y + rr * Math.sin(a)).toFixed(1) + "px");
         }
-        frames.push({ clipPath: "polygon(" + pts.join(",") + ")" });
+        return "polygon(" + pts.join(",") + ")";
     }
 
+    // The outline is set every frame from requestAnimationFrame through the --wave variable
+    // (style.css: ::view-transition-new(root) { clip-path: var(--wave) }).
+    // A keyframe (Web Animations) clip-path animation was used before, but Chrome sometimes
+    // stops repainting it midway through a view transition (a ~0.45 s freeze); setting it
+    // per frame forces every frame to be drawn.
+    const root = document.documentElement;
+    root.style.setProperty("--wave", shape(0));
+    const vt = document.startViewTransition(update);
     vt.ready.then(() => {
-        const opts = { duration: 850, easing: "linear", fill: "both" };
-        document.documentElement.animate(frames, { ...opts, pseudoElement: "::view-transition-new(root)" });
-        document.documentElement.animate(
-            [{ filter: "brightness(1)" }, { filter: "brightness(0.5)" }],
-            { ...opts, easing: "ease-in", pseudoElement: "::view-transition-old(root)" });
+        // keeps the view transition alive for DURATION (it ends when its animations end)
+        root.animate({ opacity: [1, 1] }, { duration: DURATION, pseudoElement: "::view-transition-new(root)" });
+        const t0 = performance.now();
+        (function tick(now) {
+            const p = Math.min(1, (now - t0) / DURATION);
+            root.style.setProperty("--wave", shape(p));
+            if (p < 1) requestAnimationFrame(tick);
+        })(t0);
     }).catch(() => {});
-    return vt.finished.catch(() => {}).then(() => { waving = false; });
+    return vt.finished.catch(() => {}).then(() => {
+        root.style.removeProperty("--wave");
+        waving = false;
+    });
 }
+// ---------------------------------------------------------------- small effects
+// letters resolve from random characters, left to right (terminal "decode")
+function scramble(el, text, dur = 700) {
+    if (reduced) { el.textContent = text; return; }
+    const pool = "abcdefghijklmnopqrstuvwxyz0123456789#%&*";
+    const t0 = performance.now();
+    let last = -1e9;
+    (function tick(now) {
+        const p = Math.min(1, (now - t0) / dur);
+        if (now - last > 45 || p === 1) {
+            last = now;
+            const n = Math.floor(p * text.length);
+            el.textContent = text.slice(0, n) + Array.from(text.slice(n), c => c === " " ? " " : pool[Math.random() * pool.length | 0]).join("");
+        }
+        if (p < 1) requestAnimationFrame(tick);
+    })(t0);
+}
+// types text into el one character at a time
+function typeText(el, text, perChar = 14) {
+    if (reduced) { el.textContent = text; return; }
+    el.textContent = "";
+    const t0 = performance.now();
+    (function tick(now) {
+        const n = Math.min(text.length, Math.ceil((now - t0) / perChar));
+        el.textContent = text.slice(0, n);
+        if (n < text.length) requestAnimationFrame(tick);
+    })(t0);
+}
+// rank counts down from 7906 to the real rank (on a log scale, like the bar)
+function countDown(el, target, dur = 700) {
+    if (reduced) { el.textContent = target; return; }
+    const a = Math.log(TOTAL_WORDS), b = Math.log(target), t0 = performance.now();
+    (function tick(now) {
+        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+        el.textContent = p === 1 ? target : Math.round(Math.exp(a + (b - a) * e));
+        if (p < 1) requestAnimationFrame(tick);
+    })(t0);
+}
+function pulse(el, frames, opts) { if (!reduced) el.animate(frames, opts); }
+function shake(el) {
+    pulse(el, [0, -8, 7, -5, 3, 0].map(x => ({ transform: `translateX(${x}px)` })), { duration: 380, easing: "ease-out" });
+}
+// a burst of glyphs (the secret's letters and bits) flying out of (x, y)
+function burst(x, y, word) {
+    if (reduced) return;
+    const glyphs = (word + "0110").split("");
+    for (let i = 0; i < 56; i++) {
+        const s = document.createElement("span");
+        s.className = "glyph";
+        s.setAttribute("aria-hidden", "true");
+        s.textContent = glyphs[i % glyphs.length];
+        document.body.appendChild(s);
+        const a = Math.random() * Math.PI * 2, d = 80 + Math.random() * 280;
+        const dx = Math.cos(a) * d, dy = Math.sin(a) * d - 80;
+        s.animate([
+            { transform: `translate(${x}px, ${y}px) scale(1.5)`, opacity: 1 },
+            { transform: `translate(${x + dx}px, ${y + dy + 160}px) scale(0.6) rotate(${(Math.random() - 0.5) * 540}deg)`, opacity: 0 }
+        ], { duration: 900 + Math.random() * 800, easing: "cubic-bezier(.15, .7, .3, 1)" }).finished.then(() => s.remove());
+    }
+}
+
 function centerOf(el) {
     const b = el.getBoundingClientRect();
     return [b.left + b.width / 2, b.top + b.height / 2];
@@ -128,9 +240,17 @@ async function intro() {
     if (await step(400)) return;
     finish();
 }
+document.querySelectorAll("#home .reveal").forEach((el, i) => el.style.setProperty("--i", i));
 function goHome() {
     showPage("home");
-    $("play").focus();
+    const home = $("home");
+    if (!reduced) {
+        home.classList.remove("entering");
+        void home.offsetWidth;            // restart the entrance animation
+        home.classList.add("entering");
+        scramble($("title-word"), "Contexto", 650);
+    }
+    $("play").focus({ preventScroll: true });
 }
 
 // ---------------------------------------------------------------- 2. home -> game
@@ -152,12 +272,14 @@ $("home-link").addEventListener("click", () => goHome());
 
 // ---------------------------------------------------------------- 3. game
 let game = null, guesses = [], hints = [], pattern = null, finished = false, latest = null;
+// what the next render() should animate: a new guess row, a repeated one, a new hint line
+let entering = null, flashing = null, typingHint = -1;
 
 async function api(path, data) {
     const engine = await engineReady;
     if (engine) {   // C++ compiled to WebAssembly: same api_route() as the server, same JSON
         const d = data || {};
-        return JSON.parse(engine.ccall("contexto_call", "string", ["string", "string", "string"], [path, d.game || "", d.word || ""]));
+        return JSON.parse(await engine.call(path, d.game || "", d.word || ""));
     }
     const res = await fetch(API + path, {
         method: data ? "POST" : "GET",
@@ -165,6 +287,13 @@ async function api(path, data) {
         body: data ? JSON.stringify(data) : undefined
     });
     return res.json();
+}
+
+function setTries(n) {
+    const el = $("tries");
+    if (el.textContent === String(n)) return;
+    el.textContent = n;
+    if (+n) pulse(el, [{ transform: "scale(1)" }, { transform: "scale(1.5)" }, { transform: "scale(1)" }], { duration: 350, easing: "ease-out" });
 }
 
 function say(text, kind) {
@@ -181,8 +310,11 @@ function setControls() {
 
 function resetBoard() {
     game = null; guesses = []; hints = []; pattern = null; finished = false; latest = null;
+    entering = flashing = null; typingHint = -1;
     $("tries").textContent = "0";
+    $("pattern").dataset.prev = "";
     $("result").hidden = true;
+    $("result").classList.remove("reveal");
     say("");
     render();
     setControls();
@@ -190,7 +322,7 @@ function resetBoard() {
 
 async function newGame() {
     resetBoard();
-    const slow = setTimeout(() => say("Loading the word vectors..."), 300);
+    const slow = setTimeout(() => say("Loading the word vectors", "loading"), 300);
     try {
         game = (await api("/api/new", {})).game;
         say("");
@@ -206,14 +338,21 @@ const closeness = rank => rank <= 1 ? 100 : Math.max(2, (1 - Math.log(rank) / Ma
 function render() {
     // guesses (best rank first)
     const gl = $("guesses");
+    // FLIP: remember where each row was, so rows pushed down by a new guess glide instead of jumping
+    const before = new Map();
+    if (!reduced) for (const li of gl.children) before.set(li.dataset.word, li.getBoundingClientRect().top);
     gl.textContent = "";
+    let countEl = null, countRank = 0;
     for (const g of guesses.slice().sort((a, b) => a.rank - b.rank)) {
         const li = document.createElement("li");
-        li.className = "guess" + (g.hint ? " hinted" : "") + (g.word === latest ? " latest" : "");
+        li.dataset.word = g.word;
+        li.className = "guess" + (g.hint ? " hinted" : "") + (g.word === latest ? " latest" : "")
+            + (g.word === entering ? " enter" : "") + (g.word === flashing ? " flash" : "");
         const line = document.createElement("div"); line.className = "guess-line";
         const w = document.createElement("span"); w.className = "guess-word"; w.textContent = g.word;
         if (g.hint) { const t = document.createElement("span"); t.className = "guess-tag"; t.textContent = "hint"; w.appendChild(t); }
         const r = document.createElement("span"); r.className = "guess-rank"; r.textContent = g.rank;
+        if (g.word === entering) { countEl = r; countRank = g.rank; }
         line.append(w, r);
         const bar = document.createElement("div"); bar.className = "bar"; bar.setAttribute("aria-hidden", "true");
         const cover = document.createElement("div"); cover.className = "bar-cover"; cover.style.width = (100 - closeness(g.rank)) + "%";
@@ -221,48 +360,71 @@ function render() {
         li.append(line, bar);
         gl.appendChild(li);
     }
+    if (before.size) for (const li of gl.children) {
+        const old = before.get(li.dataset.word);
+        if (old == null) continue;
+        const d = old - li.getBoundingClientRect().top;
+        if (Math.abs(d) > 1) li.animate([{ transform: `translateY(${d}px)` }, { transform: "none" }], { duration: 350, easing: "cubic-bezier(.2, .8, .2, 1)" });
+    }
+    if (countEl) countDown(countEl, countRank);
+    entering = flashing = null;
     $("guesses-empty").hidden = guesses.length > 0;
 
     // hints history
     const hl = $("hints");
     hl.textContent = "";
-    for (const h of hints) {
+    hints.forEach((h, i) => {
         const li = document.createElement("li");
         const n = document.createElement("span"); n.className = "gutter"; n.textContent = String(h.n).padStart(2, "0");
         const t = document.createElement("span"); t.textContent = h.text; if (h.gold) t.className = "hint-gold";
         li.append(n, t);
+        if (i === typingHint) { li.className = "enter"; typeText(t, h.text); }
         hl.appendChild(li);
-    }
+    });
+    typingHint = -1;
     $("hints-empty").hidden = hints.length > 0;
 
-    // a______d pattern next to the guess count
+    // a______d pattern next to the guess count; newly revealed characters drop in
     $("pattern-wrap").hidden = !pattern;
     if (pattern) {
         const chars = Array(pattern.len).fill("_");
         if (pattern.first) chars[0] = pattern.first;
         if (pattern.last) chars[pattern.len - 1] = pattern.last;
-        $("pattern").textContent = chars.join("");
-        $("pattern").setAttribute("aria-label", pattern.len + " letters: " + chars.map(c => c === "_" ? "blank" : c).join(" "));
+        const pat = $("pattern"), prev = pat.dataset.prev || "", now = chars.join("");
+        if (now !== prev) {
+            pat.textContent = "";
+            chars.forEach((c, i) => {
+                const s = document.createElement("span");
+                s.textContent = c;
+                if (c !== "_") s.classList.add("lit");
+                if (!prev) { s.classList.add("pop"); s.style.setProperty("--d", i * 45 + "ms"); }
+                else if (prev[i] !== c) s.classList.add("pop");
+                pat.appendChild(s);
+            });
+            pat.dataset.prev = now;
+        }
+        pat.setAttribute("aria-label", pattern.len + " letters: " + chars.map(c => c === "_" ? "blank" : c).join(" "));
     }
 }
 
 function addGuess(word, rank, hint) {
     const old = guesses.find(g => g.word === word);
-    if (old) old.hint = old.hint || hint;
-    else guesses.push({ word, rank, hint });
+    if (old) { old.hint = old.hint || hint; flashing = word; }
+    else { guesses.push({ word, rank, hint }); entering = word; }
     latest = word;
     return !old;
 }
 
 function handleHint(r) {
     if (r.error) return say(r.error, "error");
-    $("tries").textContent = r.tries;
+    setTries(r.tries);
     const gold = r.kind === "word_at_rank";
     if (r.kind === "letter_count") pattern = { len: r.letters };
     if (r.kind === "first_letter" && pattern) pattern.first = r.letter;
     if (r.kind === "last_letter" && pattern) pattern.last = r.letter;
     if (gold) addGuess(r.word, r.rank, true);
     hints.push({ n: r.number, text: r.message, gold });
+    typingHint = hints.length - 1;
     say(r.message);
     render();
 }
@@ -273,18 +435,24 @@ function handleExit(r, won) {
     const box = $("result");
     box.textContent = "";
     const h = document.createElement("h3");
-    h.textContent = won ? "You found it: " + r.secret : "The word was: " + r.secret;
+    const secret = document.createElement("span");
+    h.append(won ? "You found it: " : "The word was: ", secret);
+    scramble(secret, r.secret, 900);
     const sub = document.createElement("p"); sub.className = "empty"; sub.textContent = "the 20 closest words";
     const ol = document.createElement("ol");
-    for (const t of r.top) {
+    for (const [i, t] of r.top.entries()) {
         const li = document.createElement("li");
+        li.style.setProperty("--i", i);
         if (t.you_were_here) li.className = "here";
         const n = document.createElement("span"); n.className = "gutter"; n.textContent = t.rank;
         li.append(n, t.word + (t.you_were_here ? "  <- you were here" : ""));
         ol.appendChild(li);
     }
     box.append(h, sub, ol);
+    box.classList.remove("reveal");
     box.hidden = false;
+    void box.offsetWidth;
+    box.classList.add("reveal");
 }
 
 $("form").addEventListener("submit", async e => {
@@ -304,15 +472,20 @@ $("form").addEventListener("submit", async e => {
     if (r.type === "hint") return handleHint(r);
     if (r.type === "exit") { say(""); return handleExit(r, false); }
 
-    $("tries").textContent = r.tries;
-    if (r.status === "not_found") return say("\"" + word + "\" is not in the word list.", "error");
-    if (r.status === "game_over") return say("This game is over. Start a new one.", "error");
+    setTries(r.tries);
+    if (r.status === "not_found") { shake($("form")); return say("\"" + word + "\" is not in the word list.", "error"); }
+    if (r.status === "game_over") { shake($("form")); return say("This game is over. Start a new one.", "error"); }
     const isNew = addGuess(word, r.rank, false);
     render();
     if (r.status === "won") {
         say(r.message, "win");
         const end = await api("/api/giveup", { game });   // fetch the top-20 list for the end screen
         handleExit(end, true);
+        // the secret word bursts out of the end screen once it has decoded
+        setTimeout(() => {
+            const s = $("result").querySelector("h3 span");
+            if (s) { const b = s.getBoundingClientRect(); burst(b.left + b.width / 2, b.top + b.height / 2, end.secret); }
+        }, 850);
     } else {
         say(isNew ? "" : "\"" + word + "\" was already guessed (rank " + r.rank + ").");
     }

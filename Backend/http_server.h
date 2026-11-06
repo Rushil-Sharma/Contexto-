@@ -32,8 +32,7 @@ typedef std::function<HttpResponse(const HttpRequest&)> HttpHandler;
 
 // Blocks forever serving requests. Returns false if the socket could not be opened.
 // `on_ready` (optional) is called once the server is listening.
-bool run_http_server(const std::string& host, int port, HttpHandler handler,
-                     std::function<void()> on_ready = nullptr);
+bool run_http_server(const std::string& host, int port, HttpHandler handler, std::function<void()> on_ready = nullptr);
 
 std::string url_decode(const std::string& s);
 

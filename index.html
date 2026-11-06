@@ -35,11 +35,11 @@
         <main class="home-main">
             <div class="hero">
                 <div class="hero-text">
-                    <h1>Contexto<span class="cursor" aria-hidden="true">&#9611;</span></h1>
-                    <p class="lede">Find the secret word. Every guess is ranked by how close its <em>meaning</em> is to the secret.</p>
-                    <button id="play" class="btn btn-primary" type="button">&gt; play</button>
+                    <h1 class="reveal"><span id="title-word">Contexto</span><span class="cursor" aria-hidden="true">&#9611;</span></h1>
+                    <p class="lede reveal">Find the secret word. Every guess is ranked by how close its <em>meaning</em> is to the secret.</p>
+                    <button id="play" class="btn btn-primary reveal" type="button">&gt; play</button>
                 </div>
-                <ul class="facts" aria-label="About the game">
+                <ul class="facts reveal" aria-label="About the game">
                     <li><span>words</span><span>7,906</span></li>
                     <li><span>vector</span><span>300 dims</span></li>
                     <li><span>model</span><span>word2vec</span></li>
@@ -47,15 +47,15 @@
                 </ul>
             </div>
 
-            <h2 class="section-title">how to play</h2>
+            <h2 class="section-title reveal">how to play</h2>
             <ol class="rules">
-                <li><span class="gutter">01</span><span class="cmd">guess</span>
+                <li class="reveal"><span class="gutter">01</span><span class="cmd">guess</span>
                     <p>Type any word from the dictionary. Each valid guess gets a rank.</p></li>
-                <li><span class="gutter">02</span><span class="cmd">rank</span>
+                <li class="reveal"><span class="gutter">02</span><span class="cmd">rank</span>
                     <p>Rank <b>1</b> is the secret word. The lower the rank, the closer your word's meaning, measured by cosine similarity between word vectors.</p></li>
-                <li><span class="gutter">03</span><span class="cmd">hint</span>
+                <li class="reveal"><span class="gutter">03</span><span class="cmd">hint</span>
                     <p>Hint 1 shows how many letters the word has, hint 2 reveals the first letter, hint 3 the last letter. After that, each hint reveals a word ranked closer than your best guess. It counts as a guess and is outlined in gold. Once you are inside the top 50, no more hints.</p></li>
-                <li><span class="gutter">04</span><span class="cmd">give up</span>
+                <li class="reveal"><span class="gutter">04</span><span class="cmd">give up</span>
                     <p>Reveals the secret word and the 20 words closest to it.</p></li>
             </ol>
         </main>
@@ -111,8 +111,7 @@
         </main>
     </section>
 
-    <!-- the C++ game compiled to WebAssembly (built by Backend/build_wasm.sh) -->
-    <script src="wasm/contexto.js"></script>
+    <!-- script.js loads the C++ engine (wasm/contexto.js) in the background via engine-worker.js -->
     <script src="script.js"></script>
 </body>
 </html>

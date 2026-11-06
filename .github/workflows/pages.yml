@@ -30,7 +30,7 @@ jobs:
       - name: Assemble site
         run: |
           mkdir -p _site/wasm
-          cp index.html style.css script.js _site/
+          cp index.html style.css script.js engine-worker.js _site/
           cp wasm/contexto.js _site/wasm/
 
       - uses: actions/upload-pages-artifact@v3

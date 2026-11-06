@@ -19,7 +19,7 @@ Both use the same `api.cpp` and `contexto.cpp`, so they return the same JSON.
 
 ## Deploying (GitHub Pages)
 
-`.github/workflows/pages.yml` runs `build_wasm.sh` on every push to `main` and publishes `index.html`, `style.css`, `script.js` and `wasm/contexto.js`. One-time setup: in the repo, go to **Settings → Pages → Source** and choose **GitHub Actions**.
+`.github/workflows/pages.yml` runs `build_wasm.sh` on every push to `main` and publishes `index.html`, `style.css`, `script.js`, `engine-worker.js` and `wasm/contexto.js` (the engine runs in a Web Worker, so it never blocks the page). One-time setup: in the repo, go to **Settings → Pages → Source** and choose **GitHub Actions**.
 
 To build the WebAssembly file locally (so that double-clicking `index.html` works without the server), install [Emscripten](https://emscripten.org/docs/getting_started/downloads.html) and run `bash Backend/build_wasm.sh`.
 
